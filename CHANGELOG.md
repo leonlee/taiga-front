@@ -4,7 +4,8 @@
 ## 1.6.0 ??? (Unreleased)
 
 ### Features
-- ...
+- Add to the Admin Panel the export to CSV sections.
+- Reorganized the Admin Panel.
 
 ### Misc
 - New contrib plugin for hipchat (by Δndrea Stagi)

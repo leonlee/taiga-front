@@ -32,10 +32,10 @@ debounce = @.taiga.debounce
 module = angular.module("taigaAdmin")
 
 #############################################################################
-## Project values Controller
+## Project values section Controller
 #############################################################################
 
-class ProjectValuesController extends mixOf(taiga.Controller, taiga.PageMixin)
+class ProjectValuesSectionController extends mixOf(taiga.Controller, taiga.PageMixin)
     @.$inject = [
         "$scope",
         "$rootScope",
@@ -59,29 +59,44 @@ class ProjectValuesController extends mixOf(taiga.Controller, taiga.PageMixin)
 
         promise.then null, @.onInitialDataError.bind(@)
 
-        @scope.$on("admin:project-values:move", @.moveValue)
-
     loadProject: ->
         return @rs.projects.get(@scope.projectId).then (project) =>
             @scope.project = project
             @scope.$emit('project:loaded', project)
             return project
 
-    loadValues: ->
-        return @rs[@scope.resource].listValues(@scope.projectId, @scope.type).then (values) =>
-            @scope.values = values
-            @scope.maxValueOrder = _.max(values, "order").order
-            return values
-
     loadInitialData: ->
         promise = @repo.resolve({pslug: @params.pslug}).then (data) =>
             @scope.projectId = data.project
             return data
 
-        return promise.then( => @q.all([
-            @.loadProject(),
-            @.loadValues(),
-        ]))
+        return promise.then => @.loadProject()
+
+
+module.controller("ProjectValuesSectionController", ProjectValuesSectionController)
+
+#############################################################################
+## Project values Controller
+#############################################################################
+
+class ProjectValuesController extends taiga.Controller
+    @.$inject = [
+        "$scope",
+        "$rootScope",
+        "$tgRepo",
+        "$tgConfirm",
+        "$tgResources",
+    ]
+
+    constructor: (@scope, @rootscope, @repo, @confirm, @rs) ->
+        @scope.$on("admin:project-values:move", @.moveValue)
+        @rootscope.$on("project:loaded", @.loadValues)
+
+    loadValues: =>
+        return @rs[@scope.resource].listValues(@scope.projectId, @scope.type).then (values) =>
+            @scope.values = values
+            @scope.maxValueOrder = _.max(values, "order").order
+            return values
 
     moveValue: (ctx, itemValue, itemIndex) =>
         values = @scope.values
@@ -320,3 +335,56 @@ ColorSelectionDirective = () ->
       }
 
 module.directive("tgColorSelection", ColorSelectionDirective)
+
+#############################################################################
+## CSV Exporter directive
+#############################################################################
+
+class CsvExporterController extends taiga.Controller
+    @.$inject = [
+        "$scope",
+        "$rootScope",
+        "$tgUrls",
+        "$tgConfirm",
+        "$tgResources",
+    ]
+
+    constructor: (@scope, @rootscope, @urls, @confirm, @rs) ->
+        @rootscope.$on("project:loaded", @.setCsvUuid)
+        @scope.$watch "csvUuid", (value) =>
+            console.log value
+            if value
+                @scope.csvUrl = @urls.resolve("#{@.type}-csv", value)
+            else
+                @scope.csvUrl = ""
+
+    setCsvUuid: =>
+        @scope.csvUuid = @scope.project["#{@.type}_csv_uuid"]
+
+    regenerateUuid: ->
+        #TODO: i18n
+        @confirm.ask("Change URL", "You going to change the CSV data access url. The previous url will be disabled. Are you sure?").then (finish) =>
+            promise = @rs.projects["regenerate_#{@.type}_csv_uuid"](@scope.projectId)
+
+            promise.then (data) =>
+                @scope.csvUuid = data.data?.uuid
+
+            promise.then null, =>
+                @confirm.notify("error")
+
+            promise.finally ->
+                finish()
+            return promise
+
+class CsvExporterUserstoriesController extends CsvExporterController
+    type: "userstories"
+
+class CsvExporterTasksController extends CsvExporterController
+    type: "tasks"
+
+class CsvExporterIssuesController extends CsvExporterController
+    type: "issues"
+
+module.controller("CsvExporterUserstoriesController", CsvExporterUserstoriesController)
+module.controller("CsvExporterTasksController", CsvExporterTasksController)
+module.controller("CsvExporterIssuesController", CsvExporterIssuesController)
